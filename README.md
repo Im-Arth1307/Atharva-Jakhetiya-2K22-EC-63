@@ -41,17 +41,17 @@ Lets students redeem the credits they've received.
 ## Deliverables
 
 ### Folder Structure
-Organize your submission using the following folder structure:
+Organize your submission using the following folder structure in your GitHub repository:
 
 ```
-your-branch/
+your-repository/
 ├── src/                           # All source code goes here
 │   └── readme.md                  # Project documentation (setup, API endpoints, etc.)
 ├── prompt/                        # LLM chat exports go here
 │   └── llm-chat-export.txt        # Exported LLM/AI assistant conversations
 ├── test-cases/                    # Test cases documentation goes here
 │   └── test-cases.txt             # Documentation on how to run each use case
-└── README.md                      # This file (assignment instructions)
+└── README.md                      # Project README (optional, can include assignment context)
 ```
 
 ### Required Files
@@ -83,30 +83,45 @@ your-branch/
 
 Follow these steps to submit your completed assignment:
 
-1. **Create a branch** with the following naming format:
+1. **Create a private GitHub repository** with the following naming format:
    ```
    firstname-lastname-collegeid
    ```
    Example: `john-doe-2024CS001`
+   
+   - Go to GitHub and create a new repository
+   - **Make it private** (not public)
+   - Initialize with a README if you want, or start with an empty repository
+   
+2. **Add the interviewer as a collaborator**:
+   - Go to your repository's **Settings** → **Collaborators**
+   - Click **Add people**
+   - Search for the interviewer's GitHub username and add them with **Read** access
+   - The interviewer's GitHub username will be provided separately
 
-2. **Organize your files** according to the folder structure specified in the Deliverables section:
+3. **Organize your files** according to the folder structure specified in the Deliverables section:
    - Place all source code in the `src/` folder
    - Update `src/readme.md` with your project documentation
    - Update `prompt/llm-chat-export.txt` with your LLM chat export (if applicable)
    - Update `test-cases/test-cases.txt` with your test case documentation
 
-3. **Ensure all required files** are included:
+4. **Ensure all required files** are included:
    - Complete source code in `src/`
    - `src/readme.md` updated with setup, run instructions, and API documentation
    - Sample requests (cURL/Postman) with example responses (can be in `src/readme.md`)
    - `prompt/llm-chat-export.txt` updated with your LLM chat export (if you used LLMs)
    - `test-cases/test-cases.txt` updated with documentation on how to run each use case
 
-4. **Verify your application** runs locally and is ready to demo
+5. **Verify your application** runs locally and is ready to demo
 
-5. **Commit and push** your branch to the repository
+6. **Commit and push** your code to your GitHub repository:
+   ```bash
+   git add .
+   git commit -m "Initial submission"
+   git push -u origin main
+   ```
 
-6. **Ensure your branch** is up to date and all files are committed
+7. **Confirm access**: Ensure the interviewer has been added as a collaborator and can access your repository
 
 ---
 
