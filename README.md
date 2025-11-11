@@ -92,36 +92,35 @@ Follow these steps to submit your completed assignment:
    - Go to GitHub and create a new repository
    - **Make it private** (not public)
    - Initialize with a README if you want, or start with an empty repository
-   
-2. **Add the interviewer as a collaborator**:
-   - Go to your repository's **Settings** → **Collaborators**
-   - Click **Add people**
-   - Search for the interviewer's GitHub username and add them with **Read** access
-   - The interviewer's GitHub username will be provided separately
 
-3. **Organize your files** according to the folder structure specified in the Deliverables section:
+2. **Organize your files** according to the folder structure specified in the Deliverables section:
    - Place all source code in the `src/` folder
    - Update `src/readme.md` with your project documentation
    - Update `prompt/llm-chat-export.txt` with your LLM chat export (if applicable)
    - Update `test-cases/test-cases.txt` with your test case documentation
 
-4. **Ensure all required files** are included:
+3. **Ensure all required files** are included:
    - Complete source code in `src/`
    - `src/readme.md` updated with setup, run instructions, and API documentation
    - Sample requests (cURL/Postman) with example responses (can be in `src/readme.md`)
    - `prompt/llm-chat-export.txt` updated with your LLM chat export (if you used LLMs)
    - `test-cases/test-cases.txt` updated with documentation on how to run each use case
 
-5. **Verify your application** runs locally and is ready to demo
+4. **Verify your application** runs locally and is ready to demo
 
-6. **Commit and push** your code to your GitHub repository:
+5. **Commit and push** your code to your GitHub repository:
    ```bash
    git add .
    git commit -m "Initial submission"
    git push -u origin main
    ```
 
-7. **Confirm access**: Ensure the interviewer has been added as a collaborator and can access your repository
+6. **Add the interviewer as a collaborator and confirm access**:
+   - Go to your repository's **Settings** → **Collaborators**
+   - Click **Add people**
+   - Search for the interviewer's GitHub username and add them with **Read** access
+   - The interviewer's GitHub username will be provided separately
+   - Ensure the interviewer has been added and can access your repository
 
 ---
 
