@@ -118,7 +118,7 @@ Once you have finished developing the app locally and it is working. Follow thes
    ```
    firstname-lastname-collegeid
    ```
-   Example: `john-doe-2024CS001`
+   Example: `phunsuk-wangdu-2022CS001`
    
    - Go to GitHub and create a new repository
    - **Make it public**
