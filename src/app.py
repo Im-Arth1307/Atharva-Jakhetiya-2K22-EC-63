@@ -144,6 +144,28 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# Initialize session state
+if 'page' not in st.session_state:
+    st.session_state.page = 'notifications'
+if 'credits_sent' not in st.session_state:
+    st.session_state.credits_sent = 55  # Initial credits sent
+if 'total_credits' not in st.session_state:
+    st.session_state.total_credits = 150  # Initial total credits
+if 'selected_student' not in st.session_state:
+    st.session_state.selected_student = None
+
+# Hardcoded student list (excluding current user)
+STUDENTS: List[Dict] = [
+    {"name": "Sarah Johnson", "roll": "2K22/EC/45"},
+    {"name": "Michael Chen", "roll": "2K22/EC/52"},
+    {"name": "Emma Wilson", "roll": "2K22/EC/38"},
+    {"name": "David Martinez", "roll": "2K22/EC/67"},
+    {"name": "Lisa Anderson", "roll": "2K22/EC/29"},
+    {"name": "Alex Thompson", "roll": "2K22/EC/71"},
+    {"name": "James Brown", "roll": "2K22/EC/56"},
+    {"name": "Olivia Davis", "roll": "2K22/EC/42"},
+]
+
 # Hardcoded notification data
 NOTIFICATIONS: List[Dict] = [
     {
@@ -279,6 +301,116 @@ def display_notification(notification: Dict):
         </div>
     """, unsafe_allow_html=True)
 
+def display_student_card(student: Dict, is_selected: bool = False):
+    """Display a student card"""
+    selected_class = "selected" if is_selected else ""
+    st.markdown(f"""
+        <div class="student-card {selected_class}">
+            <div class="student-name">{student["name"]}</div>
+            <div class="student-roll">{student["roll"]}</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+def send_credits_page():
+    """Page for sending credits to students"""
+    st.title("📤 Send Credits")
+    st.markdown("---")
+    
+    # Show current balance and limit
+    monthly_limit = 100
+    remaining_limit = monthly_limit - st.session_state.credits_sent
+    available_credits = st.session_state.total_credits
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Available Credits", f"{available_credits}")
+    with col2:
+        st.metric("Credits Sent This Month", f"{st.session_state.credits_sent}")
+    with col3:
+        st.metric("Remaining Limit", f"{remaining_limit}")
+    
+    st.markdown("---")
+    
+    # Display students in a grid
+    st.markdown("### Select a Student")
+    
+    # Create columns for student cards
+    cols = st.columns(2)
+    
+    for idx, student in enumerate(STUDENTS):
+        col_idx = idx % 2
+        with cols[col_idx]:
+            is_selected = (st.session_state.selected_student == idx)
+            display_student_card(student, is_selected)
+            
+            # Button to select student
+            if st.button(f"Select {student['name']}", key=f"select_{idx}", use_container_width=True):
+                st.session_state.selected_student = idx
+                st.rerun()
+    
+    st.markdown("---")
+    
+    # Credit input form
+    if st.session_state.selected_student is not None:
+        selected_student_data = STUDENTS[st.session_state.selected_student]
+        st.markdown(f"### Send Credits to {selected_student_data['name']}")
+        
+        with st.form("send_credits_form"):
+            credits_to_send = st.number_input(
+                "Enter number of credits to send:",
+                min_value=1,
+                max_value=min(available_credits, remaining_limit),
+                value=1,
+                step=1,
+                key="credits_input"
+            )
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                submit_button = st.form_submit_button("Send Credits", use_container_width=True)
+            with col2:
+                cancel_button = st.form_submit_button("Cancel", use_container_width=True)
+            
+            if cancel_button:
+                st.session_state.selected_student = None
+                st.rerun()
+            
+            if submit_button:
+                # Validation: Check if credits exceed (100 - credits_sent)
+                if credits_to_send > remaining_limit:
+                    st.error(f"❌ Error: Monthly sending limit reached! You can only send {remaining_limit} more credits this month (100 - {st.session_state.credits_sent} = {remaining_limit}).")
+                elif credits_to_send > available_credits:
+                    st.error(f"❌ Error: Insufficient credits! You only have {available_credits} credits available.")
+                else:
+                    # Deduct credits
+                    st.session_state.total_credits -= credits_to_send
+                    st.session_state.credits_sent += credits_to_send
+                    
+                    st.success(f"✅ Successfully sent {credits_to_send} credits to {selected_student_data['name']}!")
+                    st.info(f"Your remaining balance: {st.session_state.total_credits} credits")
+                    
+                    # Reset selection after a short delay
+                    st.session_state.selected_student = None
+                    st.rerun()
+    
+    # Back button
+    if st.button("← Back to Notifications", use_container_width=True):
+        st.session_state.page = 'notifications'
+        st.session_state.selected_student = None
+        st.rerun()
+
+def notifications_page():
+    """Main notifications page"""
+    st.title("🎉 Recent Notifications")
+    st.markdown("---")
+    
+    # Display all notifications
+    if NOTIFICATIONS:
+        for notification in NOTIFICATIONS:
+            display_notification(notification)
+    else:
+        st.info("No notifications to display.")
+
 def main():
     # Sidebar
     with st.sidebar:
@@ -297,8 +429,8 @@ def main():
         st.markdown("---")
         
         if st.button("📤 Send Credits", use_container_width=True):
-            st.info("Send Credits feature - Clicked!")
-            # In a real app, this would open a modal or navigate to a form
+            st.session_state.page = 'send_credits'
+            st.rerun()
         
         if st.button("💰 Redeem", use_container_width=True):
             st.info("Redeem feature - Clicked!")
@@ -310,8 +442,8 @@ def main():
         
         st.markdown("---")
         st.markdown("### 📊 Stats")
-        st.metric("Total Credits", "150")
-        st.metric("Credits Sent", "55")
+        st.metric("Total Credits", f"{st.session_state.total_credits}")
+        st.metric("Credits Sent", f"{st.session_state.credits_sent}")
         st.metric("Credits Received", "85")
         
         # Days until reset
@@ -319,16 +451,11 @@ def main():
         st.metric("Days Until Reset", f"{days_until_reset}", 
                   delta=f"{days_until_reset} days remaining" if days_until_reset > 0 else "Reset today!")
     
-    # Main content area
-    st.title("🎉 Recent Notifications")
-    st.markdown("---")
-    
-    # Display all notifications
-    if NOTIFICATIONS:
-        for notification in NOTIFICATIONS:
-            display_notification(notification)
+    # Main content area - route to appropriate page
+    if st.session_state.page == 'send_credits':
+        send_credits_page()
     else:
-        st.info("No notifications to display.")
+        notifications_page()
 
 if __name__ == "__main__":
     main()
