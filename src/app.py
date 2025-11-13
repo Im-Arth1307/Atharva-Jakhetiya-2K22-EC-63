@@ -562,15 +562,22 @@ def send_credits_page():
                     
                     if DB_AVAILABLE and is_connected() and current_student_id and receiver_id:
                         # Use database
-                        result = send_credits(current_student_id, receiver_id, credits_to_send, message)
-                        if result:
-                            st.success(f"✅ Successfully sent {credits_to_send} credits to {selected_student_data['name']}!")
-                            if message and message.strip():
-                                st.info(f"Message: {message.strip()}")
-                            # Refresh stats after sending
-                            st.rerun()
-                        else:
-                            st.error("❌ Failed to send credits. Please try again.")
+                        try:
+                            result = send_credits(current_student_id, receiver_id, credits_to_send, message)
+                            if result:
+                                st.success(f"✅ Successfully sent {credits_to_send} credits to {selected_student_data['name']}!")
+                                if message and message.strip():
+                                    st.info(f"Message: {message.strip()}")
+                                # Clear cache to refresh data
+                                get_students.clear()
+                                # Refresh stats after sending
+                                st.rerun()
+                            else:
+                                st.error("❌ Failed to send credits. Check console for details.")
+                                st.info("💡 Tip: Make sure students exist in database and RLS policies allow inserts.")
+                        except Exception as e:
+                            st.error(f"❌ Error sending credits: {str(e)}")
+                            st.info("💡 Check Supabase logs or console for more details.")
                     else:
                         # Fallback to session state
                         st.session_state.total_credits -= credits_to_send

@@ -83,9 +83,28 @@ def get_student_credits(student_id: str, month_year: Optional[str] = None) -> Op
 def send_credits(sender_id: str, receiver_id: str, amount: int, message: Optional[str] = None) -> Optional[Dict]:
     """Send credits from one student to another"""
     if not supabase:
+        print("Error: Supabase client not available")
         return None
     
     try:
+        # Get student names for notifications
+        sender_name = 'You'
+        receiver_name = 'Student'
+        
+        try:
+            sender_result = supabase.table('students').select('name').eq('id', sender_id).single().execute()
+            if sender_result.data:
+                sender_name = sender_result.data.get('name', 'You')
+        except:
+            pass
+        
+        try:
+            receiver_result = supabase.table('students').select('name').eq('id', receiver_id).single().execute()
+            if receiver_result.data:
+                receiver_name = receiver_result.data.get('name', 'Student')
+        except:
+            pass
+        
         # Create transaction
         transaction_data = {
             'sender_id': sender_id,
@@ -98,49 +117,58 @@ def send_credits(sender_id: str, receiver_id: str, amount: int, message: Optiona
         response = supabase.table('credit_transactions').insert(transaction_data).execute()
         transaction = response.data[0] if response.data else None
         
-        if transaction:
-            # Update sender credits
-            month_year = datetime.now().strftime('%Y-%m')
-            sender_credits = get_student_credits(sender_id, month_year)
-            
-            if sender_credits:
-                supabase.table('student_credits').update({
-                    'total_credits': sender_credits['total_credits'] - amount,
-                    'credits_sent_this_month': sender_credits['credits_sent_this_month'] + amount
-                }).eq('id', sender_credits['id']).execute()
-            
-            # Update receiver credits
-            receiver_credits = get_student_credits(receiver_id, month_year)
-            if receiver_credits:
-                supabase.table('student_credits').update({
-                    'total_credits': receiver_credits['total_credits'] + amount,
-                    'credits_received': receiver_credits['credits_received'] + amount
-                }).eq('id', receiver_credits['id']).execute()
-            else:
-                # Create new credit record for receiver
-                supabase.table('student_credits').insert({
-                    'student_id': receiver_id,
-                    'total_credits': 100 + amount,
-                    'credits_received': amount,
-                    'credits_sent_this_month': 0,
-                    'monthly_limit': 100,
-                    'month_year': month_year
-                }).execute()
-            
-            # Create notifications
-            create_notification(sender_id, 'credits_sent', 
-                              f'You sent {amount} credits', 
-                              f'You sent {amount} credits to {receiver_id}',
-                              message, receiver_id, transaction['id'])
-            
-            create_notification(receiver_id, 'credits_received',
-                              f'You received {amount} credits',
-                              f'You received {amount} credits from {sender_id}',
-                              message, sender_id, transaction['id'])
+        if not transaction:
+            print("Error: Failed to create transaction")
+            return None
+        
+        # Update sender credits
+        month_year = datetime.now().strftime('%Y-%m')
+        sender_credits = get_student_credits(sender_id, month_year)
+        
+        if not sender_credits:
+            print(f"Error: Sender credits not found for {sender_id}")
+            return None
+        
+        # Update sender
+        supabase.table('student_credits').update({
+            'total_credits': sender_credits['total_credits'] - amount,
+            'credits_sent_this_month': sender_credits['credits_sent_this_month'] + amount
+        }).eq('id', sender_credits['id']).execute()
+        
+        # Update receiver credits
+        receiver_credits = get_student_credits(receiver_id, month_year)
+        if receiver_credits:
+            supabase.table('student_credits').update({
+                'total_credits': receiver_credits['total_credits'] + amount,
+                'credits_received': receiver_credits['credits_received'] + amount
+            }).eq('id', receiver_credits['id']).execute()
+        else:
+            # Create new credit record for receiver
+            supabase.table('student_credits').insert({
+                'student_id': receiver_id,
+                'total_credits': 100 + amount,
+                'credits_received': amount,
+                'credits_sent_this_month': 0,
+                'monthly_limit': 100,
+                'month_year': month_year
+            }).execute()
+        
+        # Create notifications with proper names
+        create_notification(sender_id, 'credits_sent', 
+                          'Credits Sent', 
+                          f'You sent {amount} credits to {receiver_name}',
+                          message, receiver_id, transaction['id'])
+        
+        create_notification(receiver_id, 'credits_received',
+                          'Credits Received',
+                          f'You received {amount} credits from {sender_name}',
+                          message, sender_id, transaction['id'])
         
         return transaction
     except Exception as e:
         print(f"Error sending credits: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
