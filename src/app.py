@@ -131,6 +131,11 @@ st.markdown("""
         border-left-color: #ffb3ba;
         background: linear-gradient(90deg, #fff5f5 0%, #ffffff 100%);
     }
+    .student-card.endorsed {
+        border-left-color: #c7ceea;
+        background: linear-gradient(90deg, #f5f6fa 0%, #ffffff 100%);
+        opacity: 0.7;
+    }
     .student-name {
         font-size: 1.1rem;
         font-weight: 600;
@@ -159,6 +164,10 @@ if 'last_credits_input' not in st.session_state:
     st.session_state.last_credits_input = 1
 if 'last_message_input' not in st.session_state:
     st.session_state.last_message_input = ""
+if 'endorsed_students' not in st.session_state:
+    st.session_state.endorsed_students = []  # Track which students have been endorsed (list of student IDs)
+if 'endorsements_received' not in st.session_state:
+    st.session_state.endorsements_received = 12  # Initial endorsements received
 
 # Hardcoded student list (excluding current user)
 STUDENTS: List[Dict] = [
@@ -307,11 +316,16 @@ def display_notification(notification: Dict):
         </div>
     """, unsafe_allow_html=True)
 
-def display_student_card(student: Dict, is_selected: bool = False):
+def display_student_card(student: Dict, is_selected: bool = False, is_endorsed: bool = False):
     """Display a student card"""
-    selected_class = "selected" if is_selected else ""
+    classes = []
+    if is_selected:
+        classes.append("selected")
+    if is_endorsed:
+        classes.append("endorsed")
+    class_str = " ".join(classes) if classes else ""
     st.markdown(f"""
-        <div class="student-card {selected_class}">
+        <div class="student-card {class_str}">
             <div class="student-name">{student["name"]}</div>
             <div class="student-roll">{student["roll"]}</div>
         </div>
@@ -446,6 +460,60 @@ def send_credits_page():
         st.session_state.selected_student = None
         st.rerun()
 
+def endorse_page():
+    """Page for endorsing students"""
+    st.title("👍 Endorse Students")
+    st.markdown("---")
+    
+    st.info("💡 Endorse students to recognize their contributions. You can endorse each student only once.")
+    
+    st.markdown("---")
+    
+    # Display students in a grid
+    st.markdown("### Select a Student to Endorse")
+    
+    # Create columns for student cards
+    cols = st.columns(2)
+    
+    for idx, student in enumerate(STUDENTS):
+        col_idx = idx % 2
+        with cols[col_idx]:
+            student_id = f"{student['name']}_{student['roll']}"
+            is_endorsed = student_id in st.session_state.endorsed_students
+            
+            display_student_card(student, is_selected=False, is_endorsed=is_endorsed)
+            
+            # Button to endorse student
+            if is_endorsed:
+                st.button(
+                    f"✓ Already Endorsed",
+                    key=f"endorse_{idx}",
+                    use_container_width=True,
+                    disabled=True
+                )
+            else:
+                if st.button(f"👍 Endorse {student['name']}", key=f"endorse_{idx}", use_container_width=True):
+                    # Add to endorsed list (if not already there)
+                    if student_id not in st.session_state.endorsed_students:
+                        st.session_state.endorsed_students.append(student_id)
+                    st.success(f"✅ Successfully endorsed {student['name']}!")
+                    st.rerun()
+    
+    st.markdown("---")
+    
+    # Show endorsement stats
+    st.markdown("### Your Endorsements")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Students Endorsed", f"{len(st.session_state.endorsed_students)}")
+    with col2:
+        st.metric("Endorsements Received", f"{st.session_state.endorsements_received}")
+    
+    # Back button
+    if st.button("← Back to Notifications", use_container_width=True):
+        st.session_state.page = 'notifications'
+        st.rerun()
+
 def notifications_page():
     """Main notifications page"""
     st.title("🎉 Recent Notifications")
@@ -484,14 +552,15 @@ def main():
             # In a real app, this would open a redemption form
         
         if st.button("👍 Endorse", use_container_width=True):
-            st.info("Endorse feature - Clicked!")
-            # In a real app, this would show a list of recognitions to endorse
+            st.session_state.page = 'endorse'
+            st.rerun()
         
         st.markdown("---")
         st.markdown("### 📊 Stats")
         st.metric("Total Credits", f"{st.session_state.total_credits}")
         st.metric("Credits Sent", f"{st.session_state.credits_sent}")
         st.metric("Credits Received", "85")
+        st.metric("Endorsements Received", f"{st.session_state.endorsements_received}")
         
         # Days until reset
         days_until_reset = get_days_until_reset()
@@ -501,6 +570,8 @@ def main():
     # Main content area - route to appropriate page
     if st.session_state.page == 'send_credits':
         send_credits_page()
+    elif st.session_state.page == 'endorse':
+        endorse_page()
     else:
         notifications_page()
 
