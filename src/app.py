@@ -153,6 +153,12 @@ if 'total_credits' not in st.session_state:
     st.session_state.total_credits = 150  # Initial total credits
 if 'selected_student' not in st.session_state:
     st.session_state.selected_student = None
+if 'form_error' not in st.session_state:
+    st.session_state.form_error = None
+if 'last_credits_input' not in st.session_state:
+    st.session_state.last_credits_input = 1
+if 'last_message_input' not in st.session_state:
+    st.session_state.last_message_input = ""
 
 # Hardcoded student list (excluding current user)
 STUDENTS: List[Dict] = [
@@ -355,14 +361,36 @@ def send_credits_page():
         selected_student_data = STUDENTS[st.session_state.selected_student]
         st.markdown(f"### Send Credits to {selected_student_data['name']}")
         
-        with st.form("send_credits_form"):
+        # Display error message if there was a validation error
+        if st.session_state.form_error:
+            st.error(st.session_state.form_error)
+            st.session_state.form_error = None  # Clear error after displaying
+        
+        with st.form("send_credits_form", clear_on_submit=False):
+            # Calculate max credits that can be sent
+            max_credits = min(available_credits, remaining_limit) if remaining_limit > 0 else 0
+            if max_credits <= 0:
+                max_credits = 100  # Default max for input field
+            
+            # Use session state to preserve value on error
+            default_credits = st.session_state.last_credits_input if 'last_credits_input' in st.session_state else 1
             credits_to_send = st.number_input(
                 "Enter number of credits to send:",
-                min_value=1,
-                max_value=min(available_credits, remaining_limit),
-                value=1,
+                min_value=0,
+                max_value=max_credits,
+                value=default_credits,
                 step=1,
                 key="credits_input"
+            )
+            
+            # Use session state to preserve message on error
+            default_message = st.session_state.last_message_input if 'last_message_input' in st.session_state else ""
+            message = st.text_area(
+                "Message (optional):",
+                placeholder="Add a message to send along with the credits...",
+                value=default_message,
+                key="message_input",
+                height=100
             )
             
             col1, col2 = st.columns(2)
@@ -373,24 +401,43 @@ def send_credits_page():
             
             if cancel_button:
                 st.session_state.selected_student = None
+                st.session_state.form_error = None
+                st.session_state.last_credits_input = 1
+                st.session_state.last_message_input = ""
                 st.rerun()
             
             if submit_button:
-                # Validation: Check if credits exceed (100 - credits_sent)
-                if credits_to_send > remaining_limit:
-                    st.error(f"❌ Error: Monthly sending limit reached! You can only send {remaining_limit} more credits this month (100 - {st.session_state.credits_sent} = {remaining_limit}).")
+                # Save input values to session state
+                st.session_state.last_credits_input = credits_to_send
+                st.session_state.last_message_input = message
+                
+                # Validation: Check if credits are valid
+                if credits_to_send <= 0:
+                    st.session_state.form_error = f"❌ Error: Number of credits must be greater than 0."
+                    st.rerun()
+                elif credits_to_send > remaining_limit:
+                    st.session_state.form_error = f"❌ Error: Monthly sending limit reached! You can only send {remaining_limit} more credits this month (100 - {st.session_state.credits_sent} = {remaining_limit})."
+                    st.rerun()
                 elif credits_to_send > available_credits:
-                    st.error(f"❌ Error: Insufficient credits! You only have {available_credits} credits available.")
+                    st.session_state.form_error = f"❌ Error: Insufficient credits! You only have {available_credits} credits available."
+                    st.rerun()
                 else:
                     # Deduct credits
                     st.session_state.total_credits -= credits_to_send
                     st.session_state.credits_sent += credits_to_send
                     
-                    st.success(f"✅ Successfully sent {credits_to_send} credits to {selected_student_data['name']}!")
+                    # Show success message with optional message
+                    success_msg = f"✅ Successfully sent {credits_to_send} credits to {selected_student_data['name']}!"
+                    if message and message.strip():
+                        success_msg += f"\n\nMessage: {message.strip()}"
+                    st.success(success_msg)
                     st.info(f"Your remaining balance: {st.session_state.total_credits} credits")
                     
-                    # Reset selection after a short delay
+                    # Reset selection and form state after successful send
                     st.session_state.selected_student = None
+                    st.session_state.form_error = None
+                    st.session_state.last_credits_input = 1
+                    st.session_state.last_message_input = ""
                     st.rerun()
     
     # Back button
