@@ -1,14 +1,29 @@
 import streamlit as st
-from datetime import datetime
-from typing import List, Dict
 
-# Configure page
+# Configure page - MUST be first Streamlit command
 st.set_page_config(
     page_title="Boostly - Notifications",
     page_icon="🎉",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Now import other modules
+from datetime import datetime
+from typing import List, Dict, Optional
+from dotenv import load_dotenv
+import os
+
+# Load environment variables
+load_dotenv()
+
+# Import database helper (after page config)
+try:
+    from db_helper import *
+    DB_AVAILABLE = True
+except ImportError:
+    DB_AVAILABLE = False
+    st.warning("⚠️ Database helper not available. Using session state only.")
 
 # Custom CSS for pastel colors
 st.markdown("""
@@ -152,10 +167,6 @@ st.markdown("""
 # Initialize session state
 if 'page' not in st.session_state:
     st.session_state.page = 'notifications'
-if 'credits_sent' not in st.session_state:
-    st.session_state.credits_sent = 55  # Initial credits sent
-if 'total_credits' not in st.session_state:
-    st.session_state.total_credits = 150  # Initial total credits
 if 'selected_student' not in st.session_state:
     st.session_state.selected_student = None
 if 'form_error' not in st.session_state:
@@ -167,26 +178,129 @@ if 'last_message_input' not in st.session_state:
 if 'endorsed_students' not in st.session_state:
     st.session_state.endorsed_students = []  # Track which students have been endorsed (list of student IDs)
 if 'endorsements_received' not in st.session_state:
-    st.session_state.endorsements_received = 12  # Initial endorsements received
+    st.session_state.endorsements_received = 0  # Initial endorsements received
 if 'credits_received' not in st.session_state:
     st.session_state.credits_received = 85  # Credits received (can be redeemed)
-if 'vouchers_purchased' not in st.session_state:
-    st.session_state.vouchers_purchased = []  # List of purchased vouchers
+if 'total_credits' not in st.session_state:
+    st.session_state.total_credits = 150  # Total credits
+if 'credits_sent' not in st.session_state:
+    st.session_state.credits_sent = 0  # Credits sent this month
+if 'current_student_id' not in st.session_state:
+    st.session_state.current_student_id = None  # Current logged-in student ID
+if 'current_student_roll' not in st.session_state:
+    st.session_state.current_student_roll = "2K22/EC/63"  # Default current user
 
-# Hardcoded student list (excluding current user)
-STUDENTS: List[Dict] = [
-    {"name": "Sarah Johnson", "roll": "2K22/EC/45"},
-    {"name": "Michael Chen", "roll": "2K22/EC/52"},
-    {"name": "Emma Wilson", "roll": "2K22/EC/38"},
-    {"name": "David Martinez", "roll": "2K22/EC/67"},
-    {"name": "Lisa Anderson", "roll": "2K22/EC/29"},
-    {"name": "Alex Thompson", "roll": "2K22/EC/71"},
-    {"name": "James Brown", "roll": "2K22/EC/56"},
-    {"name": "Olivia Davis", "roll": "2K22/EC/42"},
-]
+# Load students from database or use hardcoded fallback
+@st.cache_data(ttl=60)  # Cache for 60 seconds
+def get_students() -> List[Dict]:
+    """Get students from database or fallback to hardcoded"""
+    if DB_AVAILABLE and is_connected():
+        try:
+            students_data = get_all_students()
+            if students_data and len(students_data) > 0:
+                # Filter out current user
+                current_roll = st.session_state.current_student_roll
+                students = [
+                    {"id": str(s['id']), "name": s['name'], "roll": s['roll_number']}
+                    for s in students_data if s['roll_number'] != current_roll
+                ]
+                if students:
+                    return students
+        except Exception as e:
+            st.error(f"Error loading students: {e}")
+    
+    # Fallback to hardcoded (without IDs - will use session state only)
+    return [
+        {"id": None, "name": "Sarah Johnson", "roll": "2K22/EC/45"},
+        {"id": None, "name": "Michael Chen", "roll": "2K22/EC/52"},
+        {"id": None, "name": "Emma Wilson", "roll": "2K22/EC/38"},
+        {"id": None, "name": "David Martinez", "roll": "2K22/EC/67"},
+        {"id": None, "name": "Lisa Anderson", "roll": "2K22/EC/29"},
+        {"id": None, "name": "Alex Thompson", "roll": "2K22/EC/71"},
+        {"id": None, "name": "James Brown", "roll": "2K22/EC/56"},
+        {"id": None, "name": "Olivia Davis", "roll": "2K22/EC/42"},
+    ]
 
-# Hardcoded notification data
-NOTIFICATIONS: List[Dict] = [
+# Load students (will be cached)
+STUDENTS = get_students()
+
+# Get or create current student in database
+def get_current_student_id() -> Optional[str]:
+    """Get current student ID from database"""
+    if not (DB_AVAILABLE and is_connected()):
+        return None
+    
+    if st.session_state.current_student_id:
+        return st.session_state.current_student_id
+    
+    try:
+        current_roll = st.session_state.current_student_roll
+        student = get_student_by_roll(current_roll)
+        if student:
+            student_id = str(student['id'])  # Ensure string format
+            st.session_state.current_student_id = student_id
+            return student_id
+        else:
+            # Create student if doesn't exist
+            try:
+                from supabase import create_client
+                # Try to get from config first, then env
+                try:
+                    from config import SUPABASE_URL, SUPABASE_KEY
+                except ImportError:
+                    SUPABASE_URL = os.getenv("SUPABASE_URL")
+                    SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+                
+                supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+                result = supabase.table('students').insert({
+                    'name': 'Student Name',
+                    'roll_number': current_roll
+                }).execute()
+                if result.data:
+                    student_id = str(result.data[0]['id'])  # Ensure string format
+                    st.session_state.current_student_id = student_id
+                    # Initialize credits
+                    month_year = datetime.now().strftime('%Y-%m')
+                    supabase.table('student_credits').insert({
+                        'student_id': student_id,
+                        'total_credits': 150,
+                        'credits_received': 85,
+                        'credits_sent_this_month': 55,
+                        'monthly_limit': 100,
+                        'month_year': month_year
+                    }).execute()
+                    return student_id
+            except Exception as e:
+                st.error(f"Error creating student: {e}")
+    except Exception as e:
+        st.error(f"Error getting student: {e}")
+    
+    return None
+
+# Load notifications from database or use hardcoded fallback
+def get_notifications_data() -> List[Dict]:
+    """Get notifications from database or fallback to hardcoded"""
+    current_student_id = get_current_student_id()
+    
+    if DB_AVAILABLE and is_connected() and current_student_id:
+        try:
+            notifications_data = get_notifications(current_student_id, limit=50)
+            if notifications_data:
+                return [
+                    {
+                        "type": n['notification_type'],
+                        "title": n['title'],
+                        "message": n['message'],
+                        "timestamp": n['created_at'],
+                        "details": n.get('details', '')
+                    }
+                    for n in notifications_data
+                ]
+        except Exception as e:
+            st.error(f"Error loading notifications: {e}")
+    
+    # Fallback to hardcoded
+    return [
     {
         "type": "credits_sent",
         "title": "Credits Sent",
@@ -340,16 +454,18 @@ def send_credits_page():
     st.title("📤 Send Credits")
     st.markdown("---")
     
-    # Show current balance and limit
+    # Get stats from database
+    stats = get_student_stats_from_db()
     monthly_limit = 100
-    remaining_limit = monthly_limit - st.session_state.credits_sent
-    available_credits = st.session_state.total_credits
+    credits_sent = stats['credits_sent']
+    remaining_limit = monthly_limit - credits_sent
+    available_credits = stats['total_credits']
     
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Available Credits", f"{available_credits}")
     with col2:
-        st.metric("Credits Sent This Month", f"{st.session_state.credits_sent}")
+        st.metric("Credits Sent This Month", f"{credits_sent}")
     with col3:
         st.metric("Remaining Limit", f"{remaining_limit}")
     
@@ -434,22 +550,34 @@ def send_credits_page():
                     st.session_state.form_error = f"❌ Error: Number of credits must be greater than 0."
                     st.rerun()
                 elif credits_to_send > remaining_limit:
-                    st.session_state.form_error = f"❌ Error: Monthly sending limit reached! You can only send {remaining_limit} more credits this month (100 - {st.session_state.credits_sent} = {remaining_limit})."
+                    st.session_state.form_error = f"❌ Error: Monthly sending limit reached! You can only send {remaining_limit} more credits this month (100 - {credits_sent} = {remaining_limit})."
                     st.rerun()
                 elif credits_to_send > available_credits:
                     st.session_state.form_error = f"❌ Error: Insufficient credits! You only have {available_credits} credits available."
                     st.rerun()
                 else:
-                    # Deduct credits
-                    st.session_state.total_credits -= credits_to_send
-                    st.session_state.credits_sent += credits_to_send
+                    # Send credits using database or session state
+                    current_student_id = get_current_student_id()
+                    receiver_id = selected_student_data.get('id')
                     
-                    # Show success message with optional message
-                    success_msg = f"✅ Successfully sent {credits_to_send} credits to {selected_student_data['name']}!"
-                    if message and message.strip():
-                        success_msg += f"\n\nMessage: {message.strip()}"
-                    st.success(success_msg)
-                    st.info(f"Your remaining balance: {st.session_state.total_credits} credits")
+                    if DB_AVAILABLE and is_connected() and current_student_id and receiver_id:
+                        # Use database
+                        result = send_credits(current_student_id, receiver_id, credits_to_send, message)
+                        if result:
+                            st.success(f"✅ Successfully sent {credits_to_send} credits to {selected_student_data['name']}!")
+                            if message and message.strip():
+                                st.info(f"Message: {message.strip()}")
+                            # Refresh stats after sending
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to send credits. Please try again.")
+                    else:
+                        # Fallback to session state
+                        st.session_state.total_credits -= credits_to_send
+                        st.session_state.credits_sent += credits_to_send
+                        st.success(f"✅ Successfully sent {credits_to_send} credits to {selected_student_data['name']}!")
+                        if message and message.strip():
+                            st.info(f"Message: {message.strip()}")
                     
                     # Reset selection and form state after successful send
                     st.session_state.selected_student = None
@@ -483,7 +611,14 @@ def endorse_page():
         col_idx = idx % 2
         with cols[col_idx]:
             student_id = f"{student['name']}_{student['roll']}"
-            is_endorsed = student_id in st.session_state.endorsed_students
+            # Check if endorsed (database or session state)
+            current_student_id = get_current_student_id()
+            endorsee_id = student.get('id')
+            
+            if DB_AVAILABLE and is_connected() and current_student_id and endorsee_id:
+                is_endorsed = check_endorsement_exists(current_student_id, endorsee_id)
+            else:
+                is_endorsed = student_id in st.session_state.endorsed_students
             
             display_student_card(student, is_selected=False, is_endorsed=is_endorsed)
             
@@ -497,11 +632,33 @@ def endorse_page():
                 )
             else:
                 if st.button(f"👍 Endorse {student['name']}", key=f"endorse_{idx}", use_container_width=True):
-                    # Add to endorsed list (if not already there)
-                    if student_id not in st.session_state.endorsed_students:
-                        st.session_state.endorsed_students.append(student_id)
-                    st.success(f"✅ Successfully endorsed {student['name']}!")
-                    st.rerun()
+                    # Endorse using database or session state
+                    current_student_id = get_current_student_id()
+                    endorsee_id = student.get('id')
+                    
+                    if DB_AVAILABLE and is_connected() and current_student_id and endorsee_id:
+                        # Check if already endorsed in database
+                        if not check_endorsement_exists(current_student_id, endorsee_id):
+                            result = create_endorsement(current_student_id, endorsee_id)
+                            if result:
+                                st.success(f"✅ Successfully endorsed {student['name']}!")
+                                # Also add to session state for UI
+                                if student_id not in st.session_state.endorsed_students:
+                                    st.session_state.endorsed_students.append(student_id)
+                                st.rerun()
+                            else:
+                                st.error("❌ Failed to create endorsement. Please try again.")
+                        else:
+                            st.warning("Already endorsed!")
+                            if student_id not in st.session_state.endorsed_students:
+                                st.session_state.endorsed_students.append(student_id)
+                            st.rerun()
+                    else:
+                        # Fallback to session state
+                        if student_id not in st.session_state.endorsed_students:
+                            st.session_state.endorsed_students.append(student_id)
+                        st.success(f"✅ Successfully endorsed {student['name']}!")
+                        st.rerun()
     
     st.markdown("---")
     
@@ -511,7 +668,16 @@ def endorse_page():
     with col1:
         st.metric("Students Endorsed", f"{len(st.session_state.endorsed_students)}")
     with col2:
-        st.metric("Endorsements Received", f"{st.session_state.endorsements_received}")
+        # Get endorsements from database or session state
+        current_student_id = get_current_student_id()
+        if DB_AVAILABLE and is_connected() and current_student_id:
+            try:
+                endorsements_count = get_endorsements_received(current_student_id)
+                st.metric("Endorsements Received", f"{endorsements_count}")
+            except:
+                st.metric("Endorsements Received", f"{st.session_state.endorsements_received}")
+        else:
+            st.metric("Endorsements Received", f"{st.session_state.endorsements_received}")
     
     # Back button
     if st.button("← Back to Notifications", use_container_width=True):
@@ -526,9 +692,10 @@ def redeem_page():
     # Voucher conversion rate
     VOUCHER_RATE = 5  # ₹5 per credit
     
-    # Calculate available credits for redemption (only received credits)
-    available_for_redemption = st.session_state.credits_received
-    total_credits = st.session_state.total_credits
+    # Get stats from database or session state
+    stats = get_student_stats_from_db()
+    available_for_redemption = stats.get('credits_received', st.session_state.credits_received)
+    total_credits = stats.get('total_credits', st.session_state.total_credits)
     
     # Info section
     st.info(f"💡 **Redeem your received credits into vouchers!** Each credit is worth ₹{VOUCHER_RATE}. You can only redeem credits you have received.")
@@ -659,14 +826,48 @@ def notifications_page():
     st.title("🎉 Recent Notifications")
     st.markdown("---")
     
+    # Load notifications (from database or fallback)
+    notifications = get_notifications_data()
+    
     # Display all notifications
-    if NOTIFICATIONS:
-        for notification in NOTIFICATIONS:
+    if notifications:
+        for notification in notifications:
             display_notification(notification)
     else:
         st.info("No notifications to display.")
 
+def get_student_stats_from_db():
+    """Get student stats from database or return defaults"""
+    current_student_id = get_current_student_id()
+    
+    if DB_AVAILABLE and is_connected() and current_student_id:
+        try:
+            stats = get_student_stats(current_student_id)
+            if stats:
+                return {
+                    'total_credits': stats.get('total_credits', 150),
+                    'credits_sent': stats.get('credits_sent_this_month', 0),
+                    'credits_received': stats.get('credits_received', 85),
+                    'endorsements_received': stats.get('endorsements_received', 0)
+                }
+        except Exception as e:
+            st.error(f"Error loading stats: {e}")
+    
+    # Fallback to session state or defaults
+    return {
+        'total_credits': getattr(st.session_state, 'total_credits', 150),
+        'credits_sent': getattr(st.session_state, 'credits_sent', 55),
+        'credits_received': getattr(st.session_state, 'credits_received', 85),
+        'endorsements_received': getattr(st.session_state, 'endorsements_received', 12)
+    }
+
 def main():
+    # Check database connection status
+    if DB_AVAILABLE and is_connected():
+        st.sidebar.success("✅ Connected to database")
+    elif DB_AVAILABLE:
+        st.sidebar.warning("⚠️ Database not connected - check config.py")
+    
     # Sidebar
     with st.sidebar:
         # User Profile Section
@@ -697,15 +898,23 @@ def main():
         
         st.markdown("---")
         st.markdown("### 📊 Stats")
-        st.metric("Total Credits", f"{st.session_state.total_credits}")
-        st.metric("Credits Sent", f"{st.session_state.credits_sent}")
-        st.metric("Credits Received", f"{st.session_state.credits_received}")
-        st.metric("Endorsements Received", f"{st.session_state.endorsements_received}")
+        
+        # Load stats from database
+        stats = get_student_stats_from_db()
+        st.metric("Total Credits", f"{stats['total_credits']}")
+        st.metric("Credits Sent", f"{stats['credits_sent']}")
+        st.metric("Credits Received", f"{stats['credits_received']}")
+        st.metric("Endorsements Received", f"{stats['endorsements_received']}")
         
         # Days until reset
         days_until_reset = get_days_until_reset()
         st.metric("Days Until Reset", f"{days_until_reset}", 
                   delta=f"{days_until_reset} days remaining" if days_until_reset > 0 else "Reset today!")
+        
+        # Refresh button for database updates
+        if DB_AVAILABLE and is_connected():
+            if st.button("🔄 Refresh Data", use_container_width=True):
+                st.rerun()
     
     # Main content area - route to appropriate page
     if st.session_state.page == 'send_credits':
