@@ -78,6 +78,69 @@ st.markdown("""
     h1 {
         color: #2c3e50;
     }
+    .user-profile {
+        display: flex;
+        align-items: center;
+        padding: 1rem 0;
+        margin-bottom: 1rem;
+        border-bottom: 2px solid #e8f4f8;
+    }
+    .user-avatar {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #bae1ff 0%, #ffb3ba 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: #2c3e50;
+        margin-right: 1rem;
+        flex-shrink: 0;
+    }
+    .user-info {
+        flex: 1;
+    }
+    .user-name {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #2c3e50;
+        margin-bottom: 0.25rem;
+    }
+    .user-roll {
+        font-size: 0.85rem;
+        color: #5a6c7d;
+    }
+    .student-card {
+        background-color: #ffffff;
+        padding: 1.5rem;
+        border-radius: 12px;
+        margin-bottom: 1rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        border-left: 4px solid #bae1ff;
+        background: linear-gradient(90deg, #f0f8ff 0%, #ffffff 100%);
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    .student-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+    .student-card.selected {
+        border-left-color: #ffb3ba;
+        background: linear-gradient(90deg, #fff5f5 0%, #ffffff 100%);
+    }
+    .student-name {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #2c3e50;
+        margin-bottom: 0.5rem;
+    }
+    .student-roll {
+        color: #5a6c7d;
+        font-size: 0.95rem;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -188,6 +251,19 @@ def format_timestamp(timestamp_str: str) -> str:
     except:
         return timestamp_str
 
+def get_days_until_reset() -> int:
+    """Calculate days until the next month's credit reset (first day of next month)"""
+    now = datetime.now()
+    # Get first day of next month
+    if now.month == 12:
+        next_month = datetime(now.year + 1, 1, 1)
+    else:
+        next_month = datetime(now.year, now.month + 1, 1)
+    
+    # Calculate difference
+    days_until = (next_month - now).days
+    return days_until
+
 def display_notification(notification: Dict):
     """Display a single notification card"""
     css_class = get_notification_class(notification["type"])
@@ -206,6 +282,17 @@ def display_notification(notification: Dict):
 def main():
     # Sidebar
     with st.sidebar:
+        # User Profile Section
+        st.markdown("""
+            <div class="user-profile">
+                <div class="user-avatar">👤</div>
+                <div class="user-info">
+                    <div class="user-name">Student Name</div>
+                    <div class="user-roll">2K22/EC/63</div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+        
         st.markdown("## 🎯 Actions")
         st.markdown("---")
         
@@ -226,6 +313,11 @@ def main():
         st.metric("Total Credits", "150")
         st.metric("Credits Sent", "55")
         st.metric("Credits Received", "85")
+        
+        # Days until reset
+        days_until_reset = get_days_until_reset()
+        st.metric("Days Until Reset", f"{days_until_reset}", 
+                  delta=f"{days_until_reset} days remaining" if days_until_reset > 0 else "Reset today!")
     
     # Main content area
     st.title("🎉 Recent Notifications")
