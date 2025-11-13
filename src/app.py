@@ -168,6 +168,10 @@ if 'endorsed_students' not in st.session_state:
     st.session_state.endorsed_students = []  # Track which students have been endorsed (list of student IDs)
 if 'endorsements_received' not in st.session_state:
     st.session_state.endorsements_received = 12  # Initial endorsements received
+if 'credits_received' not in st.session_state:
+    st.session_state.credits_received = 85  # Credits received (can be redeemed)
+if 'vouchers_purchased' not in st.session_state:
+    st.session_state.vouchers_purchased = []  # List of purchased vouchers
 
 # Hardcoded student list (excluding current user)
 STUDENTS: List[Dict] = [
@@ -514,6 +518,142 @@ def endorse_page():
         st.session_state.page = 'notifications'
         st.rerun()
 
+def redeem_page():
+    """Page for redeeming credits into vouchers"""
+    st.title("💰 Redeem Credits")
+    st.markdown("---")
+    
+    # Voucher conversion rate
+    VOUCHER_RATE = 5  # ₹5 per credit
+    
+    # Calculate available credits for redemption (only received credits)
+    available_for_redemption = st.session_state.credits_received
+    total_credits = st.session_state.total_credits
+    
+    # Info section
+    st.info(f"💡 **Redeem your received credits into vouchers!** Each credit is worth ₹{VOUCHER_RATE}. You can only redeem credits you have received.")
+    
+    st.markdown("---")
+    
+    # Display current balance
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Credits", f"{total_credits}")
+    with col2:
+        st.metric("Credits Received", f"{available_for_redemption}")
+    with col3:
+        max_voucher_value = available_for_redemption * VOUCHER_RATE
+        st.metric("Max Voucher Value", f"₹{max_voucher_value}")
+    
+    st.markdown("---")
+    
+    # Redemption form
+    st.markdown("### Purchase Vouchers")
+    
+    with st.form("redeem_form", clear_on_submit=False):
+        # Number of vouchers to purchase
+        num_vouchers = st.number_input(
+            "Number of vouchers to purchase:",
+            min_value=1,
+            max_value=100,
+            value=1,
+            step=1,
+            key="num_vouchers_input",
+            help="You can purchase multiple vouchers at once"
+        )
+        
+        # Credits per voucher
+        credits_per_voucher = st.number_input(
+            "Credits per voucher:",
+            min_value=1,
+            max_value=available_for_redemption,
+            value=1,
+            step=1,
+            key="credits_per_voucher_input",
+            help=f"Maximum: {available_for_redemption} credits (your received credits)"
+        )
+        
+        # Calculate total credits needed and voucher value
+        total_credits_needed = num_vouchers * credits_per_voucher
+        total_voucher_value = total_credits_needed * VOUCHER_RATE
+        
+        # Display calculation
+        st.markdown("---")
+        st.markdown("### Purchase Summary")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Credits Needed", f"{total_credits_needed}")
+        with col2:
+            st.metric("Total Voucher Value", f"₹{total_voucher_value}")
+        with col3:
+            st.metric("Vouchers", f"{num_vouchers}")
+        
+        st.markdown("---")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            submit_button = st.form_submit_button("Purchase Vouchers", use_container_width=True)
+        with col2:
+            cancel_button = st.form_submit_button("Cancel", use_container_width=True)
+        
+        if cancel_button:
+            st.rerun()
+        
+        if submit_button:
+            # Validation
+            if credits_per_voucher <= 0:
+                st.error("❌ Error: Credits per voucher must be greater than 0.")
+            elif num_vouchers <= 0:
+                st.error("❌ Error: Number of vouchers must be greater than 0.")
+            elif total_credits_needed > available_for_redemption:
+                st.error(f"❌ Error: Insufficient received credits! You can only redeem {available_for_redemption} credits (credits you have received). You tried to redeem {total_credits_needed} credits.")
+            elif total_credits_needed > total_credits:
+                st.error(f"❌ Error: Insufficient total credits! You only have {total_credits} credits available.")
+            else:
+                # Process redemption
+                # Deduct from both total credits and received credits
+                st.session_state.total_credits -= total_credits_needed
+                st.session_state.credits_received -= total_credits_needed
+                
+                # Record voucher purchase
+                voucher_info = {
+                    "num_vouchers": num_vouchers,
+                    "credits_per_voucher": credits_per_voucher,
+                    "total_credits": total_credits_needed,
+                    "total_value": total_voucher_value,
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                }
+                st.session_state.vouchers_purchased.append(voucher_info)
+                
+                # Success message
+                if num_vouchers == 1:
+                    st.success(f"✅ Successfully purchased {num_vouchers} voucher worth ₹{total_voucher_value}!")
+                else:
+                    st.success(f"✅ Successfully purchased {num_vouchers} vouchers worth ₹{total_voucher_value} total!")
+                
+                st.info(f"Your remaining balance: {st.session_state.total_credits} credits ({st.session_state.credits_received} received credits available for redemption)")
+                st.rerun()
+    
+    st.markdown("---")
+    
+    # Display purchase history
+    if st.session_state.vouchers_purchased:
+        st.markdown("### Recent Voucher Purchases")
+        for idx, voucher in enumerate(reversed(st.session_state.vouchers_purchased[-5:])):  # Show last 5
+            with st.expander(f"Voucher Purchase #{len(st.session_state.vouchers_purchased) - idx} - {voucher['timestamp']}"):
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Vouchers", f"{voucher['num_vouchers']}")
+                with col2:
+                    st.metric("Credits Used", f"{voucher['total_credits']}")
+                with col3:
+                    st.metric("Total Value", f"₹{voucher['total_value']}")
+    
+    # Back button
+    if st.button("← Back to Notifications", use_container_width=True):
+        st.session_state.page = 'notifications'
+        st.rerun()
+
 def notifications_page():
     """Main notifications page"""
     st.title("🎉 Recent Notifications")
@@ -548,8 +688,8 @@ def main():
             st.rerun()
         
         if st.button("💰 Redeem", use_container_width=True):
-            st.info("Redeem feature - Clicked!")
-            # In a real app, this would open a redemption form
+            st.session_state.page = 'redeem'
+            st.rerun()
         
         if st.button("👍 Endorse", use_container_width=True):
             st.session_state.page = 'endorse'
@@ -559,7 +699,7 @@ def main():
         st.markdown("### 📊 Stats")
         st.metric("Total Credits", f"{st.session_state.total_credits}")
         st.metric("Credits Sent", f"{st.session_state.credits_sent}")
-        st.metric("Credits Received", "85")
+        st.metric("Credits Received", f"{st.session_state.credits_received}")
         st.metric("Endorsements Received", f"{st.session_state.endorsements_received}")
         
         # Days until reset
@@ -572,6 +712,8 @@ def main():
         send_credits_page()
     elif st.session_state.page == 'endorse':
         endorse_page()
+    elif st.session_state.page == 'redeem':
+        redeem_page()
     else:
         notifications_page()
 
